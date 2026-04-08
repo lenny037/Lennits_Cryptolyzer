@@ -1,0 +1,576 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>Lennits_Cryptolyzer | Intelligence Engineered</title>
+    <!-- Fonts & Icons -->
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;800&family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --black-primary: #050505;
+            --black-secondary: #0f0f0f;
+            --red-glow: #ff1a1a;
+            --red-deep: #8b0000;
+            --copper: #b87333;
+            --copper-light: #d49a5a;
+            --text-light: #f5f5f5;
+            --text-muted: #b5b5b5;
+        }
+
+        body {
+            background: radial-gradient(circle at top right, #1a0000 0%, #000000 40%);
+            font-family: 'Inter', sans-serif;
+            color: var(--text-light);
+            line-height: 1.6;
+            scroll-behavior: smooth;
+        }
+
+        h1, h2, h3, h4 {
+            font-family: 'Orbitron', sans-serif;
+            letter-spacing: 1px;
+        }
+
+        /* Sticky Navigation */
+        .sticky-nav {
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+            background: rgba(5, 5, 5, 0.95);
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid rgba(184, 115, 51, 0.4);
+            padding: 0.75rem 8%;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .sticky-nav .logo {
+            font-family: 'Orbitron', sans-serif;
+            font-weight: 800;
+            color: var(--copper-light);
+            text-shadow: 0 0 10px var(--red-glow);
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 2rem;
+            flex-wrap: wrap;
+        }
+
+        .nav-links a {
+            color: var(--text-muted);
+            text-decoration: none;
+            font-weight: 500;
+            transition: color 0.2s;
+        }
+
+        .nav-links a:hover {
+            color: var(--copper-light);
+        }
+
+        section {
+            padding: 80px 8%;
+            position: relative;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: auto;
+        }
+
+        /* Hero */
+        .hero {
+            text-align: center;
+            padding: 100px 8% 80px 8%;
+            background: linear-gradient(to bottom, #000000 0%, #0a0000 100%);
+        }
+
+        .hero h1 {
+            font-size: 3.5rem;
+            font-weight: 800;
+            color: var(--copper-light);
+            text-shadow: 0 0 20px var(--red-glow);
+            animation: glowPulse 3s infinite;
+        }
+
+        @keyframes glowPulse {
+            0% { text-shadow: 0 0 20px var(--red-glow); }
+            50% { text-shadow: 0 0 35px var(--red-glow); }
+            100% { text-shadow: 0 0 20px var(--red-glow); }
+        }
+
+        .hero .subtitle {
+            font-size: 1.2rem;
+            color: var(--copper);
+            margin-top: 0.5rem;
+            font-family: 'Orbitron', sans-serif;
+        }
+
+        .hero p {
+            font-size: 1.2rem;
+            color: var(--text-muted);
+            max-width: 800px;
+            margin: 30px auto;
+        }
+
+        /* Buttons */
+        .btn {
+            display: inline-block;
+            padding: 12px 30px;
+            border-radius: 30px;
+            text-decoration: none;
+            font-weight: 600;
+            transition: 0.3s ease;
+            cursor: pointer;
+            border: none;
+            font-size: 1rem;
+        }
+
+        .btn-primary {
+            background: linear-gradient(45deg, var(--red-deep), var(--red-glow));
+            color: white;
+            border: 1px solid var(--copper);
+            box-shadow: 0 0 20px rgba(255, 0, 0, 0.5);
+        }
+
+        .btn-primary:hover {
+            box-shadow: 0 0 35px var(--red-glow);
+            transform: translateY(-3px);
+        }
+
+        .btn-outline {
+            background: transparent;
+            border: 1px solid var(--copper);
+            color: var(--copper-light);
+        }
+
+        .btn-outline:hover {
+            background: rgba(184, 115, 51, 0.2);
+            border-color: var(--red-glow);
+            color: var(--red-glow);
+            transform: translateY(-3px);
+        }
+
+        .btn-pdf {
+            background: var(--black-secondary);
+            border: 1px solid var(--copper);
+            color: var(--text-light);
+            margin-left: 1rem;
+        }
+
+        .btn-pdf:hover {
+            border-color: var(--red-glow);
+            color: var(--red-glow);
+        }
+
+        /* Card Grid */
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 30px;
+        }
+
+        .card {
+            background: var(--black-secondary);
+            border: 1px solid rgba(184, 115, 51, 0.4);
+            padding: 30px;
+            border-radius: 15px;
+            transition: 0.3s ease;
+        }
+
+        .card:hover {
+            border-color: var(--red-glow);
+            box-shadow: 0 0 25px rgba(255, 0, 0, 0.4);
+            transform: translateY(-5px);
+        }
+
+        .card h3 {
+            color: var(--copper-light);
+            margin-bottom: 15px;
+        }
+
+        .card ul, .card p {
+            color: var(--text-muted);
+        }
+
+        .card ul {
+            padding-left: 20px;
+        }
+
+        /* Section Titles */
+        .section-title {
+            text-align: center;
+            margin-bottom: 60px;
+        }
+
+        .section-title h2 {
+            font-size: 2.5rem;
+            color: var(--copper);
+            text-shadow: 0 0 12px rgba(255, 0, 0, 0.4);
+        }
+
+        .section-title p {
+            color: var(--text-muted);
+            max-width: 700px;
+            margin: 1rem auto 0;
+        }
+
+        /* Architecture box */
+        .architecture-box {
+            background: var(--black-secondary);
+            border: 1px solid var(--copper);
+            padding: 50px;
+            border-radius: 20px;
+            box-shadow: 0 0 30px rgba(184, 115, 51, 0.3);
+        }
+
+        .architecture-box h3 {
+            color: var(--copper-light);
+            font-size: 2rem;
+            margin-bottom: 2rem;
+            text-align: center;
+        }
+
+        .plane-section {
+            margin-bottom: 3rem;
+            padding: 2rem;
+            background: rgba(184, 115, 51, 0.05);
+            border-left: 4px solid var(--copper);
+            border-radius: 10px;
+        }
+
+        .plane-section h4 {
+            color: var(--copper-light);
+            font-size: 1.5rem;
+            margin-bottom: 1rem;
+        }
+
+        .plane-section p {
+            color: var(--text-muted);
+            line-height: 1.8;
+            margin-bottom: 1rem;
+        }
+
+        .plane-section .modules {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            margin-top: 1rem;
+        }
+
+        .module-tag {
+            background: var(--black-primary);
+            border: 1px solid var(--copper);
+            color: var(--copper-light);
+            padding: 0.4rem 1rem;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-family: 'Orbitron', sans-serif;
+        }
+
+        /* Timeline */
+        .timeline {
+            position: relative;
+            padding-left: 2rem;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        .timeline-item {
+            position: relative;
+            padding-bottom: 2.5rem;
+        }
+
+        .timeline-item::before {
+            content: '';
+            position: absolute;
+            left: -2rem;
+            top: 0;
+            width: 1rem;
+            height: 1rem;
+            border-radius: 50%;
+            background: var(--red-glow);
+            border: 2px solid var(--copper);
+        }
+
+        .timeline-item::after {
+            content: '';
+            position: absolute;
+            left: -1.55rem;
+            top: 1rem;
+            width: 2px;
+            height: 100%;
+            background: var(--copper);
+        }
+
+        .timeline-item:last-child::after {
+            display: none;
+        }
+
+        .timeline-date {
+            font-weight: 700;
+            color: var(--copper-light);
+            margin-bottom: 0.5rem;
+        }
+
+        /* Table */
+        .table-container {
+            overflow-x: auto;
+            margin-top: 2rem;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: var(--black-secondary);
+            border-radius: 1rem;
+            overflow: hidden;
+            border: 1px solid rgba(184, 115, 51, 0.4);
+        }
+
+        th, td {
+            padding: 1rem;
+            text-align: left;
+            border-bottom: 1px solid rgba(184, 115, 51, 0.2);
+        }
+
+        th {
+            background: var(--black-primary);
+            color: var(--copper-light);
+            font-weight: 600;
+        }
+
+        code {
+            background: #1e1e1e;
+            padding: 0.2rem 0.4rem;
+            border-radius: 4px;
+        }
+
+        /* Email Signup Form */
+        .signup-form {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 1rem;
+            justify-content: center;
+            margin-top: 2rem;
+        }
+
+        .signup-form input {
+            padding: 12px 20px;
+            border-radius: 30px;
+            border: 1px solid var(--copper);
+            background: var(--black-secondary);
+            color: var(--text-light);
+            font-size: 1rem;
+            min-width: 250px;
+            flex: 1 1 250px;
+        }
+
+        .signup-form input::placeholder {
+            color: var(--text-muted);
+        }
+
+        .signup-form input:focus {
+            outline: none;
+            border-color: var(--red-glow);
+            box-shadow: 0 0 15px rgba(255, 0, 0, 0.3);
+        }
+
+        .success-message {
+            color: var(--copper-light);
+            margin-top: 1rem;
+            font-weight: 600;
+            display: none;
+        }
+
+        /* Social Icons */
+        .social-icons {
+            display: flex;
+            gap: 1.5rem;
+            justify-content: center;
+            margin-top: 2rem;
+        }
+
+        .social-icons a {
+            color: var(--text-muted);
+            font-size: 1.8rem;
+            transition: color 0.3s, transform 0.3s;
+        }
+
+        .social-icons a:hover {
+            color: var(--copper-light);
+            transform: translateY(-5px);
+        }
+
+        /* Footer */
+        footer {
+            background: black;
+            padding: 50px 8% 30px;
+            text-align: center;
+            color: var(--text-muted);
+            border-top: 1px solid rgba(184,115,51,0.4);
+        }
+
+        .legal-note {
+            margin-top: 1rem;
+            font-size: 0.9rem;
+            color: var(--copper);
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .hero h1 { font-size: 2.5rem; }
+            section { padding: 60px 5%; }
+            .sticky-nav { flex-direction: column; gap: 0.5rem; }
+            .nav-links { justify-content: center; gap: 1rem; }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Sticky Navigation -->
+    <nav class="sticky-nav">
+        <div class="logo">⚡ Lennits_Cryptolyzer</div>
+        <div class="nav-links">
+            <a href="#home">Home</a>
+            <a href="#architecture">Architecture</a>
+            <a href="#modules">Modules</a>
+            <a href="#roadmap">Roadmap</a>
+            <a href="#tokenomics">Tokenomics</a>
+            <a href="#signup">Sign Up</a>
+        </div>
+    </nav>
+
+    <!-- Hero / Home -->
+    <section id="home" class="hero">
+        <div class="container">
+            <h1>Lennits_Cryptolyzer</h1>
+            <div class="subtitle">(An Experience By) LENNIT SUITE TECHNOLOGIES©</div>
+            <p>Intelligent Autonomous Infrastructure. Modular AI Systems. Advanced Security Frameworks. Designed for dominance in high-performance digital ecosystems.</p>
+            <div>
+                <a href="#signup" class="btn btn-primary">Get Early Access</a>
+                <a href="#" onclick="window.print(); return false;" class="btn btn-pdf"><i class="fas fa-file-pdf"></i> Download Brochure</a>
+            </div>
+        </div>
+    </section>
+
+    <!-- System Architecture -->
+    <section id="architecture">
+        <div class="container">
+            <div class="section-title">
+                <h2>Layered Intelligence Architecture</h2>
+                <p>Four integrated planes working in unison to create an evolving cryptostate intelligence.</p>
+            </div>
+            <div class="architecture-box">
+                <div class="plane-section">
+                    <h4>1. Intelligence Core &amp; Memory Plane</h4>
+                    <p>At the heart of Lennits_Cryptolyzer is an <strong>Intelligence Core &amp; Memory Plane</strong> that acts as the system's evolving cryptostate of mind. This plane fuses adaptive reasoning with long-horizon memory, a global on-chain/off-chain knowledge graph, and a high-throughput signal factory. Autonomous agents are created and deployed through the Agent Foundry, giving the platform a growing population of specialized AI entities that share the same memory and understanding of the ecosystem.</p>
+                    <div class="modules">
+                        <span class="module-tag">Lennit_01 – Core Intelligence</span>
+                        <span class="module-tag">Lennit_06 – MCP Memory</span>
+                        <span class="module-tag">Lennit_13 – Knowledge Graph Nexus</span>
+                        <span class="module-tag">Lennit_14 – Signal Synthesizer</span>
+                        <span class="module-tag">Lennit_17 – Agent Foundry</span>
+                    </div>
+                </div>
+
+                <div class="plane-section">
+                    <h4>2. Market Engines &amp; Crypto Execution Plane</h4>
+                    <p>The <strong>Market Engines &amp; Crypto Execution Plane</strong> is where intelligence becomes capital movement. Here, the trading and yield stack spans real-time arbitrage, DeFi integration, smart order routing, and multi-source oracle aggregation, with risk monitoring and strategy validation governing how strategies are designed, validated, and sized. Auxiliary engines handle capital acquisition and high-fidelity stress-testing, giving agents a safe arena to fail, learn, and then deploy live.</p>
+                    <div class="modules">
+                        <span class="module-tag">Lennit_03 – Trade Engine</span>
+                        <span class="module-tag">Lennit_04 – Faucet Collector</span>
+                        <span class="module-tag">Lennit_05 – DeFi Integrator</span>
+                        <span class="module-tag">Lennit_07 – Oracle Matrix</span>
+                        <span class="module-tag">Lennit_08 – Risk Sentinel</span>
+                        <span class="module-tag">Lennit_09 – Strategy Foundry</span>
+                        <span class="module-tag">Lennit_10 – Liquidity Router</span>
+                        <span class="module-tag">Lennit_18 – Simulation Arena</span>
+                    </div>
+                </div>
+
+                <div class="plane-section">
+                    <h4>3. Security, Compliance &amp; Guardrail Plane</h4>
+                    <p>All actions are gated by a dedicated <strong>Security, Compliance &amp; Guardrail Plane</strong> that treats every request as untrusted by default. Continuous monitoring of behavioral patterns, threat surfaces, and anomalies combines with regional policy enforcement, KYC/AML hooks, and programmable constraints at the execution boundary. Together, they form a zero-trust shield around the cryptostate: no agent, strategy, or module bypasses this plane.</p>
+                    <div class="modules">
+                        <span class="module-tag">Lennit_02 – Vault &amp; Security</span>
+                        <span class="module-tag">Lennit_11 – Compliance &amp; Guardrails</span>
+                    </div>
+                </div>
+
+                <div class="plane-section">
+                    <h4>4. Orchestration, Governance &amp; Insight Plane</h4>
+                    <p>On top sits the <strong>Orchestration, Governance &amp; Insight Plane</strong>, the control surface for humans and higher-level automation. Workflow orchestration chains modules into deterministic flows (signal → decision → risk → execution → post-trade analysis), while deep, real-time telemetry provides insight into system health and agent performance. Governance and reporting give stakeholders a single place to propose changes, vote, adjust parameters, and consume narrative-grade reports on PnL, risk, and yield across the entire mesh.</p>
+                    <div class="modules">
+                        <span class="module-tag">Lennit_12 – Telemetry &amp; Observability</span>
+                        <span class="module-tag">Lennit_15 – Execution Orchestrator</span>
+                        <span class="module-tag">Lennit_16 – Governance Console</span>
+                        <span class="module-tag">Lennit_19 – Insight &amp; Reporting Hub</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Core Modules -->
+    <section id="modules">
+        <div class="container">
+            <div class="section-title">
+                <h2>All 19 Platform Modules</h2>
+                <p>The complete mesh of AI-driven services powering the cryptostate.</p>
+            </div>
+            <div class="grid">
+                <div class="card">
+                    <h3>Lennit_01 – Core Intelligence</h3>
+                    <ul>
+                        <li>Adaptive AI reasoning framework</li>
+                        <li>Real-time decision optimization</li>
+                        <li>Autonomous learning architecture</li>
+                        <li>Multi-layer data synthesis</li>
+                    </ul>
+                </div>
+                <div class="card">
+                    <h3>Lennit_02 – Vault &amp; Security</h3>
+                    <ul>
+                        <li>Advanced anomaly detection</li>
+                        <li>Behavioral pattern analytics</li>
+                        <li>Threat surface monitoring</li>
+                        <li>Zero-trust enforcement logic</li>
+                    </ul>
+                </div>
+                <div class="card">
+                    <h3>Lennit_03 – Trade Engine</h3>
+                    <ul>
+                        <li>Real-time arbitrage detection</li>
+                        <li>Cross-exchange aggregation</li>
+                        <li>Wasm-accelerated execution</li>
+                        <li>MEV protection &amp; Flashbots</li>
+                    </ul>
+                </div>
+                <div class="card">
+                    <h3>Lennit_04 – Faucet Collector</h3>
+                    <ul>
+                        <li>Automated claim scheduling</li>
+                        <li>Captcha solving (AI/ML)</li>
+                        <li>Multi-chain destination support</li>
+                        <li>Background sync &amp; queueing</li>
+                    </ul>
+                </div>
+                <div class="card">
+                    <h3>Lennit_05 – DeFi Integrator</h3>
+                    <ul>
+                        <li>Smart contract deployment</li>
+                        <li>Aave / Uniswap adapters</li>
+                        <li>Flash loan arbitrage</li>
+                        <li>Yield farming optimizer</li>
+                    </ul>
+    

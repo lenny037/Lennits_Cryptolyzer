@@ -1,0 +1,16 @@
+lennits_cryptolyzer/
+├── backend/app/main.py
+├── backend/app/core/config.py
+├── backend/app/core/logger.py
+├── backend/app/blockchain/web3_client.py
+├── backend/app/execution/dex_executor.py
+├── backend/app/execution/flashbots.py
+├── backend/app/services/gas_service.py
+├── backend/app/services/profit_service.py
+├── backend/app/services/signal_service.py
+├── backend/app/services/trade_validator.py
+├── backend/app/agents/execution_agent.py
+├── backend/app/agents/orchestrator.py
+├── backend/app/api/routes.py
+├── infra/docker/Dockerfile
+├── requirements.txt

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="lennit_black">#FF000000</color>
+    <color name="lennit_surface">#FF121212</color>
+    <color name="lennit_copper">#FFB87333</color>
+    <color name="lennit_red">#FFCC0000</color>
+    <color name="lennit_green">#FF00C853</color>
+    <color name="lennit_gold">#FFFFD700</color>
+    <color name="lennit_white">#FFEEEEEE</color>
+</resources>

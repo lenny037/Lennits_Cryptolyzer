@@ -1,0 +1,9 @@
+cmake_minimum_required(VERSION 3.22.1)
+project("genesis_brain")
+
+# Tell Android Studio to look for the Rust compiled library
+add_library(genesis_brain SHARED IMPORTED)
+
+# Link the pre-compiled Rust binary into the Android App
+set_target_properties(genesis_brain PROPERTIES IMPORTED_LOCATION
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../../../rust_core/target/${ANDROID_ABI}/release/libgenesis_brain.so)

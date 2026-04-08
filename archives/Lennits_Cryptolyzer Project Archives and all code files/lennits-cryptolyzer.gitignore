@@ -1,0 +1,33 @@
+# Secrets — never commit these
+.env
+*.jks
+keystore.jks
+google-services.json
+firebase.json
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+models/
+*.pkl
+
+# Android
+android/app/build/
+android/.gradle/
+*.apk
+*.aab
+local.properties
+
+# Rust
+rust-core/target/
+
+# Node / web tooling
+node_modules/
+dist/
+
+# IDE
+.idea/
+.vscode/
+*.iml

@@ -1,0 +1,27 @@
+Lennit_Genesis_2026/
+├── app/ (The Android Physical Layer)
+│   ├── build.gradle.kts           <-- [DONE] NDK Automation & 2026 SDK links
+│   ├── src/main/
+│   │   ├── java/com/lennit/core/
+│   │   │   ├── GuardianService.kt  <-- [DONE] S20 "Unrestricted" Battery Bypass
+│   │   │   ├── Telemetry.kt        <-- [NEW] NPU Thermal & Frequency Scaling
+│   │   │   └── AgentBridge.kt      <-- [DONE] High-speed JNI Handshake
+│   │   ├── AndroidManifest.xml     <-- [DONE] Aggressive A13 Permission Set
+│   │   └── assets/
+│   │       ├── llama3_2_q4.pte     <-- [DONE] ExecuTorch Optimized Model
+│   │       └── index.html          <-- [DONE] WebGPU Landing/Admin Page
+├── rust_core/ (The Native Neural Brain)
+│   ├── Cargo.toml                  <-- [DONE] NIST FIPS 204 & Libp2p 2026
+│   ├── src/
+│   │   ├── brain/
+│   │   │   ├── mod.rs              <-- [DONE] Model Loading & Memory Pinning
+│   │   │   └── npu_accelerator.rs  <-- [NEW] Snapdragon 865 Hexagon Bridge
+│   │   ├── crypto/
+│   │   │   ├── hybrid_sign.rs      <-- [DONE] Quantum-Shield (ML-DSA)
+│   │   │   └── enclave.rs          <-- [NEW] Android Keystore TEE Integration
+│   │   └── society/
+│   │       ├── mesh_sync.rs        <-- [DONE] P2P Swarm Bootstrap
+│   │       └── zk_oracle.rs        <-- [NEW] Non-Interactive ZK-Proof Logic
+└── web_admin/ (The Domain Cockpit)
+    ├── webgpu_vis.js               <-- [DONE] 120Hz Market Fabric Visuals
+    └── socket_bridge.js            <-- [DONE] Remote Neural Link (WSS)

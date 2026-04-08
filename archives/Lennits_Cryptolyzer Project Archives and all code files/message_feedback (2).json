@@ -1,0 +1,86 @@
+[
+  {
+    "content": "{\"tags\": [\"bad-transcription\"]}",
+    "conversation_id": "67d0939c-64f8-800c-8876-7154d4341b22",
+    "create_time": "2025-10-17T18:42:33.085777Z",
+    "evaluation_name": null,
+    "evaluation_treatment": null,
+    "id": "9080ff66-cbf4-4b62-950c-7a2eff3536d9",
+    "rating": "thumbs_down",
+    "update_time": "2025-10-17T18:42:33.280611Z",
+    "user_id": "user-BGADemdwUonbmrXDxnEV1OYL",
+    "workspace_id": null
+  },
+  {
+    "content": "{}",
+    "conversation_id": "67d0939c-64f8-800c-8876-7154d4341b22",
+    "create_time": "2025-10-19T13:52:38.017467Z",
+    "evaluation_name": "gpt5_free_switcher_holdout",
+    "evaluation_treatment": "aa",
+    "id": "74614878-c026-4d10-8341-b7e968eba58b",
+    "rating": "thumbs_up",
+    "update_time": "2025-10-19T13:52:38.098943Z",
+    "user_id": "user-BGADemdwUonbmrXDxnEV1OYL",
+    "workspace_id": null
+  },
+  {
+    "content": "{}",
+    "conversation_id": "67d0939c-64f8-800c-8876-7154d4341b22",
+    "create_time": "2025-10-19T23:56:47.136390Z",
+    "evaluation_name": "gpt5_free_switcher_holdout",
+    "evaluation_treatment": "aa",
+    "id": "5069516c-541e-4c01-ae32-d6e791714a44",
+    "rating": "thumbs_up",
+    "update_time": "2025-10-19T23:56:47.188655Z",
+    "user_id": "user-BGADemdwUonbmrXDxnEV1OYL",
+    "workspace_id": null
+  },
+  {
+    "content": "{}",
+    "conversation_id": "6f617a65-efb9-44b6-bf83-01e03ac215c5",
+    "create_time": "2025-12-03T15:40:38.088084Z",
+    "evaluation_name": null,
+    "evaluation_treatment": null,
+    "id": "7dc7a6e0-29cd-4e93-8fc8-7d0a8c6a6d75",
+    "rating": "thumbs_up",
+    "update_time": "2025-12-03T15:40:38.128030Z",
+    "user_id": "user-BGADemdwUonbmrXDxnEV1OYL",
+    "workspace_id": null
+  },
+  {
+    "content": "{}",
+    "conversation_id": "6928419f-3160-8328-a7bd-8d805f406700",
+    "create_time": "2025-12-03T16:58:54.561659Z",
+    "evaluation_name": null,
+    "evaluation_treatment": null,
+    "id": "adc59118-ba24-4bb9-95ab-2be6369eab71",
+    "rating": "thumbs_up",
+    "update_time": "2025-12-03T16:58:54.635932Z",
+    "user_id": "user-BGADemdwUonbmrXDxnEV1OYL",
+    "workspace_id": null
+  },
+  {
+    "content": "{}",
+    "conversation_id": "699961af-678c-8333-bd1b-c17cdc14edfd",
+    "create_time": "2026-02-21T12:05:04.503092Z",
+    "evaluation_name": "chatgpt_math_block_directives_1",
+    "evaluation_treatment": "aa",
+    "id": "db563fac-81df-4b88-82e0-26c596fdb163",
+    "rating": "thumbs_down",
+    "update_time": "2026-02-21T12:05:04.534610Z",
+    "user_id": "user-BGADemdwUonbmrXDxnEV1OYL",
+    "workspace_id": null
+  },
+  {
+    "content": "{}",
+    "conversation_id": "699c6cc1-63ac-832a-9388-8e0dbed47eaf",
+    "create_time": "2026-02-26T08:02:09.412776Z",
+    "evaluation_name": "chatgpt_math_block_directives_1",
+    "evaluation_treatment": "aa",
+    "id": "73c669ff-2ebb-4504-9fae-797f72d6bb85",
+    "rating": "thumbs_up",
+    "update_time": "2026-02-26T08:02:09.471698Z",
+    "user_id": "user-BGADemdwUonbmrXDxnEV1OYL",
+    "workspace_id": null
+  }
+]

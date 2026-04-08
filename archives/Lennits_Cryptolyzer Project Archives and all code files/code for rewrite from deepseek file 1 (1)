@@ -1,0 +1,1630 @@
+import { Server } from '@modelcontextprotocol/sdk/server/index.js';
+import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
+import sqlite3 from 'sqlite3';
+import { open } from 'sqlite';
+import { pipeline } from '@xenova/transformers';
+import { CREDENTIALS } from '@lennit/core/credentials';
+
+const extractor = await pipeline('feature-extraction', 'Xenova/bge-small-en-v1.5');
+
+const db = await open({
+  filename: './lennit-memory.db',
+  driver: sqlite3.Database
+});
+
+await db.exec(`
+  CREATE TABLE IF NOT EXISTS memories (
+    id TEXT PRIMARY KEY,
+    content TEXT,
+    embedding BLOB,
+    type TEXT,
+    created_at INTEGER,
+    importance REAL DEFAULT 0.5,
+    access_count INTEGER DEFAULT 0
+  );
+  CREATE TABLE IF NOT EXISTS relationships (
+    from_id TEXT,
+    to_id TEXT,
+    relation TEXT,
+    strength REAL DEFAULT 1.0,
+    FOREIGN KEY(from_id) REFERENCES memories(id),
+    FOREIGN KEY(to_id) REFERENCES memories(id)
+  );
+`);
+
+const server = new Server(
+  { name: 'lennit-memory', version: '1.0.0' },
+  { capabilities: { tools: {} } }
+);
+
+server.setRequestHandler(ListToolsRequestSchema, async () => ({
+  tools: [
+    {
+      name: 'lennit_store',
+      description: 'Store a memory with automatic embedding',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          content: { type: 'string' },
+          type: { type: 'string', enum: ['trade', 'faucet', 'contract', 'error', 'preference', 'scrape'] },
+          relationships: { type: 'array', items: { type: 'string' } },
+          importance: { type: 'number', minimum: 0, maximum: 1 }
+        },
+        required: ['content', 'type']
+      }
+    },
+    {
+      name: 'lennit_query',
+      description: 'Semantic search across memories',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          query: { type: 'string' },
+          type: { type: 'string' },
+          limit: { type: 'number', default: 10 }
+        },
+        required: ['query']
+      }
+    },
+    {
+      name: 'lennit_lessons',
+      description: 'Retrieve lessons learned from past operations',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          topic: { type: 'string' },
+          min_importance: { type: 'number', default: 0.7 }
+        }
+      }
+    },
+    {
+      name: 'lennit_checkpoint',
+      description: 'Save current task state to resume later',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          task_id: { type: 'string' },
+          description: { type: 'string' },
+          state: { type: 'object' }
+        },
+        required: ['task_id', 'description', 'state']
+      }
+    }
+  ]
+}));
+
+server.setRequestHandler(CallToolRequestSchema, async (request) => {
+  const { name, arguments: args } = request.params;
+  
+  switch (name) {
+    case 'lennit_store': {
+      const embedding = await extractor(args.content, { pooling: 'mean', normalize: true });
+      const id = crypto.randomUUID();
+      await db.run(
+        'INSERT INTO memories (id, content, embedding, type, created_at, importance) VALUES (?, ?, ?, ?, ?, ?)',
+        [id, args.content, Buffer.from(embedding.data), args.type, Date.now(), args.importance || 0.5]
+      );
+      if (args.relationships) {
+        for (const relId of args.relationships) {
+          await db.run('INSERT INTO relationships (from_id, to_id, relation) VALUES (?, ?, ?)', [id, relId, 'related']);
+        }
+      }
+      return { content: [{ type: 'text', text: JSON.stringify({ id }) }] };
+    }
+    
+    case 'lennit_query': {
+      const memories = await db.all(
+        'SELECT id, content, type, importance FROM memories WHERE type = ? OR ? IS NULL ORDER BY created_at DESC LIMIT ?',
+        [args.type || '', args.type || null, args.limit || 10]
+      );
+      return { content: [{ type: 'text', text: JSON.stringify(memories) }] };
+    }
+    
+    case 'lennit_checkpoint': {
+      await db.run(
+        'INSERT INTO memories (id, content, type, created_at, importance) VALUES (?, ?, ?, ?, ?)',
+        [args.task_id, JSON.stringify(args.state), 'checkpoint', Date.now(), 0.9]
+      );
+      return { content: [{ type: 'text', text: JSON.stringify({ success: true, id: args.task_id }) }] };
+    }
+    
+    default:
+      throw new Error(`Unknown tool: ${name}`);
+  }
+});
+
+const transport = new StdioServerTransport();
+await server.connect(transport);
+console.error('LENNIT Memory MCP server running on stdio');
+
+
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: lennit
+      POSTGRES_USER: lennit
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - lennit-network
+
+  redis:
+    image: redis:7-alpine
+    command: redis-server --requirepass ${REDIS_PASSWORD}
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - lennit-network
+
+  electric:
+    image: electricsql/electric:latest
+    environment:
+      DATABASE_URL: postgresql://lennit:${DB_PASSWORD}@postgres:5432/lennit
+      PG_PROXY_PASSWORD: ${PG_PROXY_PASSWORD}
+    ports:
+      - "5133:5133"
+    depends_on:
+      - postgres
+    networks:
+      - lennit-network
+
+  lennit-memory:
+    build: ./lennit-memory
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PASSWORD=${DB_PASSWORD}
+    depends_on:
+      - redis
+      - postgres
+    networks:
+      - lennit-network
+
+  lennit-extractor:
+    build: ./lennit-extractor
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PASSWORD=${DB_PASSWORD}
+      - NOPECHA_KEY=${NOPECHA_KEY}
+      - TWO_CAPTCHA_KEY=${TWO_CAPTCHA_KEY}
+      - PROXY_API_KEY=${PROXY_API_KEY}
+    volumes:
+      - ./data/extractor:/data/lennit-extractor
+    depends_on:
+      - redis
+      - postgres
+      - lennit-memory
+    networks:
+      - lennit-network
+
+  lennit-web:
+    build: ./lennit-web
+    ports:
+      - "5173:5173"
+    environment:
+      - VITE_API_URL=http://lennit-bff:8787
+    depends_on:
+      - lennit-memory
+      - lennit-extractor
+    networks:
+      - lennit-network
+
+  lennit-bff:
+    build: ./lennit-bff
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - DATABASE_URL=postgresql://lennit:${DB_PASSWORD}@postgres:5432/lennit
+    ports:
+      - "8787:8787"
+    depends_on:
+      - redis
+      - postgres
+    networks:
+      - lennit-network
+
+networks:
+  lennit-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  redis_data:
+
+export const CREDENTIALS = {
+  PERSONAL: {
+    FULL_NAME: 'Leonard James Melton',
+    EMAIL: 'Leonardmelton037@gmail.com',
+    PASSWORD: '082281Leo#..',
+    PHONE: '(270) 922-5710',
+    DOB: '08/22/1981',
+    ADDRESS: {
+      STREET: '760 Pell St',
+      CITY: 'Lewisport',
+      STATE: 'Kentucky',
+      ZIP: '42351',
+      COUNTRY: 'United States of America',
+    },
+  },
+  WALLETS: {
+    BASE_ENS: 'lowkey037.base.eth',
+    MNEMONIC: 'object craft vault near join provide manual grow depend crane deposit trophy',
+    ETH: '0xcF871a0717Deb5D34Eb2e4370525EFC888E36ABd',
+    BTC: 'bc1qpcd5d8axhmqhkccphwe39fgwcwvnnysh5y0u97',
+    SOL: '4iPEAor2AnxJGo4dGUiSEsaRx6zCCV2Y9tTXx6GvCZLX',
+    LTC: 'ltc1qs5yneshag6xh9tvk6vs78dnuvgzsvftktqdeet',
+    DOGE: 'DDWmHH7EhVhz2CwqTPrDUNWSifqgtmjRc6',
+  },
+  DB: {
+    PASSWORD: '082281Leo#..',
+    PG_PROXY_PASSWORD: '082281Leo#..',
+    HOST: '192.168.1.100',
+    PORT: 5432,
+  },
+  REDIS: {
+    PASSWORD: '082281Leo#..',
+    HOST: '192.168.1.100',
+    PORT: 6379,
+  },
+  BINANCE: { API_KEY: 'YOUR_BINANCE_API_KEY', SECRET_KEY: 'YOUR_BINANCE_SECRET' },
+  COINBASE: { API_KEY: 'YOUR_COINBASE_API_KEY', SECRET: 'YOUR_COINBASE_SECRET' },
+  KRAKEN: { API_KEY: 'YOUR_KRAKEN_API_KEY', SECRET: 'YOUR_KRAKEN_SECRET' },
+  BYBIT: { API_KEY: 'YOUR_BYBIT_API_KEY', SECRET: 'YOUR_BYBIT_SECRET' },
+  OKX: { API_KEY: 'YOUR_OKX_API_KEY', SECRET: 'YOUR_OKX_SECRET' },
+  ETH: { RPC_URL: 'https://cloudflare-eth.com' },
+  BSC: { RPC_URL: 'https://bsc-dataseed.binance.org/' },
+  POLYGON: { RPC_URL: 'https://polygon-rpc.com/' },
+  ARBITRUM: { RPC_URL: 'https://arb1.arbitrum.io/rpc/' },
+  BASE: { RPC_URL: 'https://mainnet.base.org' },
+  FLASHBOTS: { AUTH_KEY: 'YOUR_FLASHBOTS_AUTH_KEY' },
+  NOPECHA: { API_KEY: 'YOUR_NOPECHA_KEY' },
+  CAPTCHA: { TWO_CAPTCHA_KEY: 'YOUR_2CAPTCHA_KEY', CAPSOLVER_KEY: 'YOUR_CAPSOLVER_KEY' },
+  PROXY: { API_KEY: 'YOUR_PROXY_API_KEY', SERVICE: 'brightdata' },
+  CLOUDFLARE: { ACCOUNT_ID: 'YOUR_ACCOUNT_ID', API_TOKEN: 'YOUR_API_TOKEN', D1_DATABASE_ID: 'YOUR_D1_DB_ID' },
+  AAVE: { POOL_ADDRESS_PROVIDER: '0xa97684ead0e402d2328de' },
+  TELEGRAM: { BOT_TOKEN: 'YOUR_TELEGRAM_BOT_TOKEN', CHAT_ID: 'YOUR_CHAT_ID' },
+  FAUCET: {
+    DESTINATIONS: {
+      ETH: '0xcF871a0717Deb5D34Eb2e4370525EFC888E36ABd',
+      BTC: 'bc1qpcd5d8axhmqhkccphwe39fgwcwvnnysh5y0u97',
+      SOL: '4iPEAor2AnxJGo4dGUiSEsaRx6zCCV2Y9tTXx6GvCZLX',
+      LTC: 'ltc1qs5yneshag6xh9tvk6vs78dnuvgzsvftktqdeet',
+      DOGE: 'DDWmHH7EhVhz2CwqTPrDUNWSifqgtmjRc6',
+      BASE: 'lowkey037.base.eth',
+    },
+  },
+  EXTRACTOR: { CUSTOM_SEEDS: [], MAX_CONCURRENCY: 100, PROXY_ROTATION_MINUTES: 5 },
+};
+
+lennits-cryptolyzer/
+├── lennit-core/           # Core infrastructure (Lennit_01)
+├── lennit-vault/           # Wallet management (Lennit_02)
+├── lennit-trade/           # Arbitrage engine (Lennit_03)
+├── lennit-faucet/          # Faucet collector (Lennit_04)
+├── lennit-defi/            # Smart contracts (Lennit_05)
+├── lennit-memory/          # MCP memory server (Lennit_06)
+├── lennit-analytics/       # Monitoring (Lennit_07)
+├── lennit-sync/            # Offline sync (Lennit_08)
+├── lennit-web/             # Frontend PWA (Lennit_09)
+├── lennit-extractor/       # Web scraper (Lennit_10)
+├── lennit-bot/             # Telegram/Discord bot (Lennit_11)
+├── lennit-alerts/          # Notification system (Lennit_12)
+├── lennit-charts/          # WebGPU charts (Lennit_13)
+├── lennit-bridge/          # Cross-chain bridge (Lennit_14)
+├── lennit-yield/           # Yield optimizer (Lennit_15)
+├── lennit-guard/           # Risk management (Lennit_16)
+├── lennit-logs/            # Audit logging (Lennit_17)
+├── lennit-auth/            # Authentication (Lennit_18)
+├── lennit-storage/         # IPFS/Arweave (Lennit_19)
+├── lennit-devtools/        # Development tools (Lennit_20)
+├── docker-compose.yml
+├── .env.example
+└── README.md
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>Lennits_Cryptolyzer | LS Technologies</title>
+    <!-- Fonts & Icons -->
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;800&family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --black-primary: #050505;
+            --black-secondary: #0f0f0f;
+            --red-glow: #ff1a1a;
+            --red-deep: #8b0000;
+            --copper: #b87333;
+            --copper-light: #d49a5a;
+            --text-light: #f5f5f5;
+            --text-muted: #b5b5b5;
+        }
+
+        body {
+            background: radial-gradient(circle at top right, #1a0000 0%, #000000 40%);
+            font-family: 'Inter', sans-serif;
+            color: var(--text-light);
+            line-height: 1.6;
+            scroll-behavior: smooth;
+        }
+
+        h1, h2, h3, h4 {
+            font-family: 'Orbitron', sans-serif;
+            letter-spacing: 1px;
+        }
+
+        /* Sticky Navigation */
+        .sticky-nav {
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+            background: rgba(5, 5, 5, 0.95);
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid rgba(184, 115, 51, 0.4);
+            padding: 0.75rem 8%;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .sticky-nav .logo {
+            font-family: 'Orbitron', sans-serif;
+            font-weight: 800;
+            color: var(--copper-light);
+            text-shadow: 0 0 10px var(--red-glow);
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 2rem;
+            flex-wrap: wrap;
+        }
+
+        .nav-links a {
+            color: var(--text-muted);
+            text-decoration: none;
+            font-weight: 500;
+            transition: color 0.2s;
+        }
+
+        .nav-links a:hover {
+            color: var(--copper-light);
+        }
+
+        section {
+            padding: 80px 8%;
+            position: relative;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: auto;
+        }
+
+        /* Hero */
+        .hero {
+            text-align: center;
+            padding: 100px 8% 80px 8%;
+            background: linear-gradient(to bottom, #000000 0%, #0a0000 100%);
+        }
+
+        .hero h1 {
+            font-size: 3.5rem;
+            font-weight: 800;
+            color: var(--copper-light);
+            text-shadow: 0 0 20px var(--red-glow);
+            animation: glowPulse 3s infinite;
+        }
+
+        @keyframes glowPulse {
+            0% { text-shadow: 0 0 20px var(--red-glow); }
+            50% { text-shadow: 0 0 35px var(--red-glow); }
+            100% { text-shadow: 0 0 20px var(--red-glow); }
+        }
+
+        .hero .subtitle {
+            font-size: 1.1rem;
+            color: var(--copper);
+            margin-top: 0.5rem;
+            font-family: 'Orbitron', sans-serif;
+        }
+
+        .hero p {
+            font-size: 1.05rem;
+            color: var(--text-muted);
+            max-width: 800px;
+            margin: 30px auto;
+        }
+
+        /* Buttons */
+        .btn {
+            display: inline-block;
+            padding: 12px 30px;
+            border-radius: 30px;
+            text-decoration: none;
+            font-weight: 600;
+            transition: 0.3s ease;
+            cursor: pointer;
+            border: none;
+            font-size: 1rem;
+        }
+
+        .btn-primary {
+            background: linear-gradient(45deg, var(--red-deep), var(--red-glow));
+            color: white;
+            border: 1px solid var(--copper);
+            box-shadow: 0 0 20px rgba(255, 0, 0, 0.5);
+        }
+
+        .btn-primary:hover {
+            box-shadow: 0 0 35px var(--red-glow);
+            transform: translateY(-3px);
+        }
+
+        .btn-outline {
+            background: transparent;
+            border: 1px solid var(--copper);
+            color: var(--copper-light);
+        }
+
+        .btn-outline:hover {
+            background: rgba(184, 115, 51, 0.2);
+            border-color: var(--red-glow);
+            color: var(--red-glow);
+            transform: translateY(-3px);
+        }
+
+        .btn-pdf {
+            background: var(--black-secondary);
+            border: 1px solid var(--copper);
+            color: var(--text-light);
+            margin-left: 1rem;
+        }
+
+        .btn-pdf:hover {
+            border-color: var(--red-glow);
+            color: var(--red-glow);
+        }
+
+        /* Card Grid */
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 30px;
+        }
+
+        .card {
+            background: var(--black-secondary);
+            border: 1px solid rgba(184, 115, 51, 0.4);
+            padding: 30px;
+            border-radius: 15px;
+            transition: 0.3s ease;
+        }
+
+        .card:hover {
+            border-color: var(--red-glow);
+            box-shadow: 0 0 25px rgba(255, 0, 0, 0.4);
+            transform: translateY(-5px);
+        }
+
+        .card h3 {
+            color: var(--copper-light);
+            margin-bottom: 15px;
+        }
+
+        .card ul, .card p {
+            color: var(--text-muted);
+        }
+
+        .card ul {
+            padding-left: 20px;
+        }
+
+        /* Section Titles */
+        .section-title {
+            text-align: center;
+            margin-bottom: 60px;
+        }
+
+        .section-title h2 {
+            font-size: 2.3rem;
+            color: var(--copper);
+            text-shadow: 0 0 12px rgba(255, 0, 0, 0.4);
+        }
+
+        .section-title p {
+            color: var(--text-muted);
+            max-width: 700px;
+            margin: 1rem auto 0;
+        }
+
+        /* Timeline */
+        .timeline {
+            position: relative;
+            padding-left: 2rem;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        .timeline-item {
+            position: relative;
+            padding-bottom: 2.5rem;
+        }
+
+        .timeline-item::before {
+            content: '';
+            position: absolute;
+            left: -2rem;
+            top: 0;
+            width: 1rem;
+            height: 1rem;
+            border-radius: 50%;
+            background: var(--red-glow);
+            border: 2px solid var(--copper);
+        }
+
+        .timeline-item::after {
+            content: '';
+            position: absolute;
+            left: -1.55rem;
+            top: 1rem;
+            width: 2px;
+            height: 100%;
+            background: var(--copper);
+        }
+
+        .timeline-item:last-child::after {
+            display: none;
+        }
+
+        .timeline-date {
+            font-weight: 700;
+            color: var(--copper-light);
+            margin-bottom: 0.5rem;
+        }
+
+        /* Table */
+        .table-container {
+            overflow-x: auto;
+            margin-top: 2rem;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: var(--black-secondary);
+            border-radius: 1rem;
+            overflow: hidden;
+            border: 1px solid rgba(184, 115, 51, 0.4);
+        }
+
+        th, td {
+            padding: 1rem;
+            text-align: left;
+            border-bottom: 1px solid rgba(184, 115, 51, 0.2);
+        }
+
+        th {
+            background: var(--black-primary);
+            color: var(--copper-light);
+            font-weight: 600;
+        }
+
+        code {
+            background: #1e1e1e;
+            padding: 0.2rem 0.4rem;
+            border-radius: 4px;
+        }
+
+        /* Architecture box */
+        .architecture-box {
+            background: var(--black-secondary);
+            border: 1px solid var(--copper);
+            padding: 40px;
+            border-radius: 20px;
+            text-align: center;
+            box-shadow: 0 0 30px rgba(184, 115, 51, 0.3);
+        }
+
+        .architecture-box p {
+            color: var(--text-muted);
+            line-height: 2;
+        }
+
+        /* Email Signup Form */
+        .signup-form {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 1rem;
+            justify-content: center;
+            margin-top: 2rem;
+        }
+
+        .signup-form input {
+            padding: 12px 20px;
+            border-radius: 30px;
+            border: 1px solid var(--copper);
+            background: var(--black-secondary);
+            color: var(--text-light);
+            font-size: 1rem;
+            min-width: 250px;
+            flex: 1 1 250px;
+        }
+
+        .signup-form input::placeholder {
+            color: var(--text-muted);
+        }
+
+        .signup-form input:focus {
+            outline: none;
+            border-color: var(--red-glow);
+            box-shadow: 0 0 15px rgba(255, 0, 0, 0.3);
+        }
+
+        .success-message {
+            color: var(--copper-light);
+            margin-top: 1rem;
+            font-weight: 600;
+            display: none;
+        }
+
+        /* Footer */
+        footer {
+            background: black;
+            padding: 40px 8% 25px;
+            text-align: center;
+            color: var(--text-muted);
+            border-top: 1px solid rgba(184,115,51,0.4);
+            font-size: 0.9rem;
+        }
+
+        .legal-note {
+            margin-top: 1rem;
+            font-size: 0.85rem;
+            color: var(--copper);
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .hero h1 { font-size: 2.3rem; }
+            section { padding: 60px 5%; }
+            .sticky-nav { flex-direction: column; gap: 0.5rem; }
+            .nav-links { justify-content: center; gap: 1rem; }
+            .architecture-box { padding: 25px; }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Sticky Navigation -->
+    
+
+lennits-cryptolyzer/
+├── lennit-core/           # Core infrastructure (Lennit_01)
+├── lennit-vault/           # Wallet management (Lennit_02)
+├── lennit-trade/           # Arbitrage engine (Lennit_03)
+├── lennit-faucet/          # Faucet collector (Lennit_04)
+├── lennit-defi/            # Smart contracts (Lennit_05)
+├── lennit-memory/          # MCP memory server (Lennit_06)
+├── lennit-analytics/       # Monitoring (Lennit_07)
+├── lennit-sync/            # Offline sync (Lennit_08)
+├── lennit-web/             # Frontend PWA (Lennit_09)
+├── lennit-extractor/       # Web scraper (Lennit_10)
+├── lennit-bot/             # Telegram/Discord bot (Lennit_11)
+├── lennit-alerts/          # Notification system (Lennit_12)
+├── lennit-charts/          # WebGPU charts (Lennit_13)
+├── lennit-bridge/          # Cross-chain bridge (Lennit_14)
+├── lennit-yield/           # Yield optimizer (Lennit_15)
+├── lennit-guard/           # Risk management (Lennit_16)
+├── lennit-logs/            # Audit logging (Lennit_17)
+├── lennit-auth/            # Authentication (Lennit_18)
+├── lennit-storage/         # IPFS/Arweave (Lennit_19)
+├── lennit-devtools/        # Development tools (Lennit_20)
+├── docker-compose.yml
+├── .env.example
+└── README.md
+
+
+# Database
+DB_PASSWORD=082281Leo#..
+PG_PROXY_PASSWORD=082281Leo#..
+
+# Redis
+REDIS_PASSWORD=082281Leo#..
+
+# Exchange API Keys
+BINANCE_API_KEY=your_binance_api_key
+BINANCE_SECRET=your_binance_secret
+COINBASE_API_KEY=your_coinbase_api_key
+COINBASE_SECRET=your_coinbase_secret
+KRAKEN_API_KEY=your_kraken_api_key
+KRAKEN_SECRET=your_kraken_secret
+BYBIT_API_KEY=your_bybit_api_key
+BYBIT_SECRET=your_bybit_secret
+OKX_API_KEY=your_okx_api_key
+OKX_SECRET=your_okx_secret
+
+# Captcha Services
+NOPECHA_KEY=your_nopecha_key
+TWO_CAPTCHA_KEY=your_2captcha_key
+CAPSOLVER_KEY=your_capsolver_key
+
+# Proxy Service
+PROXY_API_KEY=your_proxy_api_key
+
+# Flashbots
+FLASHBOTS_AUTH_KEY=your_flashbots_auth_key
+
+# Telegram
+TELEGRAM_BOT_TOKEN=your_telegram_bot_token
+TELEGRAM_CHAT_ID=your_chat_id
+
+
+{
+  "pipeline": {
+    "build": {
+      "dependsOn": ["^build"],
+      "outputs": ["dist/**"]
+    },
+    "dev": {
+      "cache": false
+    }
+  }
+}
+
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>Lennits_Cryptolyzer | Intelligence Engineered</title>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;800&family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <style>
+        /* Complete CSS from the brochure code above */
+        /* (See previous message for full CSS) */
+    </style>
+</head>
+<body>
+    <!-- Complete HTML from the brochure code above -->
+    <!-- (See previous message for full HTML) -->
+</body>
+</html>
+
+{
+  "name": "lennits-cryptolyzer",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "turbo dev",
+    "build": "turbo build",
+    "start": "docker-compose up",
+    "stop": "docker-compose down"
+  },
+  "devDependencies": {
+    "turbo": "^1.12.0"
+  },
+  "packageManager": "pnpm@8.9.0"
+}
+
+use wasm_bindgen::prelude::*;
+use serde::{Deserialize, Serialize};
+use float_ord::FloatOrd;
+
+#[derive(Deserialize)]
+pub struct Ticker {
+    pub exchange: String,
+    pub base: String,
+    pub quote: String,
+    pub bid: f64,
+    pub ask: f64,
+}
+
+#[derive(Serialize)]
+pub struct Opportunity {
+    pub id: String,
+    pub base: String,
+    pub quote: String,
+    pub buy_exchange: String,
+    pub sell_exchange: String,
+    pub spread: f64,
+}
+
+#[wasm_bindgen]
+pub fn find_opportunities(json: &str, min_spread: f64) -> String {
+    let tickers: Vec<Ticker> = serde_json::from_str(json).unwrap_or_default();
+    let mut result = Vec::new();
+    
+    for base in tickers.iter().map(|t| &t.base).collect::<std::collections::HashSet<_>>() {
+        for quote in tickers.iter().map(|t| &t.quote).collect::<std::collections::HashSet<_>>() {
+            let mut relevant: Vec<&Ticker> = tickers.iter()
+                .filter(|t| &t.base == base && &t.quote == quote)
+                .collect();
+            
+            if relevant.len() < 2 { continue; }
+            
+            relevant.sort_by_key(|t| FloatOrd(t.ask));
+            let best_buy = relevant.first().unwrap();
+            
+            relevant.sort_by_key(|t| FloatOrd(-t.bid));
+            let best_sell = relevant.first().unwrap();
+            
+            let spread = best_sell.bid / best_buy.ask - 1.0;
+            if spread >= min_spread {
+                result.push(Opportunity {
+                    id: format!("{}-{}-{}-{}", base, quote, best_buy.exchange, best_sell.exchange),
+                    base: base.to_string(),
+                    quote: quote.to_string(),
+                    buy_exchange: best_buy.exchange.clone(),
+                    sell_exchange: best_sell.exchange.clone(),
+                    spread,
+                });
+            }
+        }
+    }
+    
+    serde_json::to_string(&result).unwrap()
+}
+
+# Complete LS.Technologies MCP Server - Master Setup Script
+# Run this script to create the entire project from scratch
+
+# Create project root
+mkdir -p ls-technologies-mcp
+cd ls-technologies-mcp
+
+# Create package.json
+cat > package.json << 'EOF'
+{
+  "name": "ls-technologies-mcp",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "build": "INPUT=mcp-app.html vite build && INPUT=random-app.html vite build",
+    "serve": "npx tsx server.ts",
+    "dev": "npx tsx watch server.ts",
+    "deploy": "npm run build && npm run serve"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/ext-apps": "^0.1.0",
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "cors": "^2.8.5",
+    "express": "^4.18.2"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
+    "@types/node": "^20.10.0",
+    "tsx": "^4.6.0",
+    "typescript": "^5.3.0",
+    "vite": "^5.0.0",
+    "vite-plugin-singlefile": "^2.0.0"
+  }
+}
+EOF
+
+# Create tsconfig.json
+cat > tsconfig.json << 'EOF'
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "outDir": "dist",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"]
+  },
+  "include": ["*.ts", "src/**/*.ts"]
+}
+EOF
+
+# Create vite.config.ts
+cat > vite.config.ts << 'EOF'
+import { defineConfig } from "vite";
+import { viteSingleFile } from "vite-plugin-singlefile";
+
+export default defineConfig({
+  plugins: [viteSingleFile()],
+  build: {
+    outDir: "dist",
+    rollupOptions: {
+      input: process.env.INPUT,
+    },
+  },
+});
+EOF
+
+# Create main server.ts
+cat > server.ts << 'EOF'
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import {
+  registerAppTool,
+  registerAppResource,
+  RESOURCE_MIME_TYPE,
+} from "@modelcontextprotocol/ext-apps/server";
+import cors from "cors";
+import express from "express";
+import fs from "node:fs/promises";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+const server = new McpServer({
+  name: "LS.Technologies MCP Server",
+  version: "1.0.0",
+  description: "Interactive AI applications hosted at LS.Technologies",
+});
+
+const resourceUri = "ui://ls.technologies/mcp-app.html";
+
+registerAppTool(
+  server,
+  "get-time",
+  {
+    title: "Get Current Time",
+    description: "Returns the current server time in ISO format",
+    inputSchema: {
+      type: "object",
+      properties: {
+        format: {
+          type: "string",
+          enum: ["iso", "local", "unix"],
+          description: "Time format to return"
+        }
+      }
+    },
+    _meta: { 
+      ui: { 
+        resourceUri,
+        csp: "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline';"
+      } 
+    },
+  },
+  async (args: { format?: string }) => {
+    const now = new Date();
+    let time: string;
+    
+    switch(args.format) {
+      case "local":
+        time = now.toLocaleString();
+        break;
+      case "unix":
+        time = now.getTime().toString();
+        break;
+      default:
+        time = now.toISOString();
+    }
+    
+    return {
+      content: [{ 
+        type: "text", 
+        text: JSON.stringify({ 
+          time, 
+          format: args.format || "iso",
+          timestamp: now.getTime()
+        }) 
+      }],
+    };
+  },
+);
+
+const randomResourceUri = "ui://ls.technologies/random-app.html";
+
+registerAppTool(
+  server,
+  "generate-random",
+  {
+    title: "Generate Random Number",
+    description: "Generates a random number within a range",
+    inputSchema: {
+      type: "object",
+      properties: {
+        min: { type: "number", default: 1 },
+        max: { type: "number", default: 100 }
+      }
+    },
+    _meta: { 
+      ui: { 
+        resourceUri: randomResourceUri,
+        csp: "default-src 'self'; script-src 'self' 'unsafe-inline';"
+      } 
+    },
+  },
+  async (args: { min?: number; max?: number }) => {
+    const min = args.min || 1;
+    const max = args.max || 100;
+    const random = Math.floor(Math.random() * (max - min + 1)) + min;
+    
+    return {
+      content: [{ 
+        type: "text", 
+        text: JSON.stringify({ 
+          value: random,
+          min,
+          max,
+          timestamp: new Date().toISOString()
+        }) 
+      }],
+    };
+  },
+);
+
+registerAppResource(
+  server,
+  resourceUri,
+  resourceUri,
+  { 
+    mimeType: RESOURCE_MIME_TYPE,
+    description: "Interactive time display application"
+  },
+  async () => {
+    try {
+      const html = await fs.readFile(
+        path.join(__dirname, "dist", "mcp-app.html"),
+        "utf-8"
+      );
+      return {
+        contents: [
+          { 
+            uri: resourceUri, 
+            mimeType: RESOURCE_MIME_TYPE, 
+            text: html 
+          },
+        ],
+      };
+    } catch (error) {
+      console.error("Error reading HTML file:", error);
+      return {
+        contents: [{
+          uri: resourceUri,
+          mimeType: "text/plain",
+          text: "Error loading application. Please ensure the build has been completed."
+        }]
+      };
+    }
+  },
+);
+
+registerAppResource(
+  server,
+  randomResourceUri,
+  randomResourceUri,
+  { 
+    mimeType: RESOURCE_MIME_TYPE,
+    description: "Interactive random number generator"
+  },
+  async () => {
+    try {
+      const html = await fs.readFile(
+        path.join(__dirname, "dist", "random-app.html"), 
+        "utf-8"
+      );
+      return {
+        contents: [
+          { 
+            uri: randomResourceUri, 
+            mimeType: RESOURCE_MIME_TYPE, 
+            text: html 
+          },
+        ],
+      };
+    } catch (error) {
+      const html = await fs.readFile(
+        path.join(__dirname, "dist", "mcp-app.html"),
+        "utf-8"
+      );
+      return {
+        contents: [
+          { 
+            uri: randomResourceUri, 
+            mimeType: RESOURCE_MIME_TYPE, 
+            text: html 
+          },
+        ],
+      };
+    }
+  },
+);
+
+const app = express();
+app.use(cors());
+app.use(express.json());
+
+app.use(express.static(path.join(__dirname, "public")));
+
+app.get("/health", (req, res) => {
+  res.json({
+    name: "LS.Technologies MCP Server",
+    version: "1.0.0",
+    status: "operational",
+    endpoints: {
+      mcp: "/mcp",
+      health: "/health",
+      website: "/"
+    },
+    tools: ["get-time", "generate-random"],
+    documentation: "https://ls.technologies/docs"
+  });
+});
+
+app.post("/mcp", async (req, res) => {
+  const transport = new StreamableHTTPServerTransport({
+    sessionIdGenerator: () => Math.random().toString(36).substring(7),
+    enableJsonResponse: true,
+  });
+  
+  res.on("close", () => transport.close());
+  res.on("error", (err) => console.error("Response error:", err));
+  
+  try {
+    await server.connect(transport);
+    await transport.handleRequest(req, res, req.body);
+  } catch (error) {
+    console.error("Error handling MCP request:", error);
+    if (!res.headersSent) {
+      res.status(500).json({ error: "Internal server error" });
+    }
+  }
+});
+
+app.get("/docs", (req, res) => {
+  res.send(`
+    <html>
+      <head><title>LS.Technologies MCP Documentation</title></head>
+      <body>
+        <h1>LS.Technologies MCP Server</h1>
+        <p>Connect your MCP client to: <code>https://ls.technologies/mcp</code></p>
+        <h2>Available Tools:</h2>
+        <ul>
+          <li><strong>get-time</strong> - Returns current server time</li>
+          <li><strong>generate-random</strong> - Generates random numbers</li>
+        </ul>
+        <h2>Configuration Examples:</h2>
+        <h3>Claude Desktop (with proxy):</h3>
+        <pre>{
+  "mcpServers": {
+    "ls-technologies": {
+      "command": "npx",
+      "args": ["-y", "mcp-remote", "https://ls.technologies/mcp"]
+    }
+  }
+}</pre>
+        <h3>VS Code/Copilot:</h3>
+        <pre>{
+  "servers": {
+    "ls-technologies": {
+      "type": "remote",
+      "url": "https://ls.technologies/mcp"
+    }
+  }
+}</pre>
+        <p><a href="/">Back to LS.Technologies home</a></p>
+      </body>
+    </html>
+  `);
+});
+
+const PORT = process.env.PORT || 3001;
+app.listen(PORT, () => {
+  console.log(`🚀 LS.Technologies MCP Server running on port ${PORT}`);
+  console.log(`📡 MCP endpoint: http://localhost:${PORT}/mcp`);
+  console.log(`🏠 Public website: http://localhost:${PORT}/`);
+  console.log(`📊 Health check: http://localhost:${PORT}/health`);
+  console.log(`📚 Docs: http://localhost:${PORT}/docs`);
+});
+EOF
+
+# Create directories
+mkdir -p src
+mkdir -p public/icons
+
+# Create public/index.html (brochure)
+cat > public/index.html << 'EOF'
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LS-Technologies | Intelligence Engineered</title>
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;800&family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --black-primary: #050505;
+      --black-secondary: #0f0f0f;
+      --red-glow: #ff1a1a;
+      --red-dark: #8b0000;
+      --copper: #b87333;
+      --copper-light: #d49a5a;
+      --text-light: #f5f5f5;
+      --text-muted: #b5b5b5;
+    }
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    body {
+      font-family: 'Inter', sans-serif;
+      background: radial-gradient(circle at top right, #190000 0%, #000000 60%);
+      color: var(--text-light);
+      line-height: 1.6;
+    }
+    header {
+      text-align: center;
+      padding: 120px 20px 80px 20px;
+    }
+    header .logos {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 20px;
+      margin-bottom: 30px;
+    }
+    header .main-logo {
+      width: 220px;
+      filter: drop-shadow(0 0 20px var(--red-glow));
+    }
+    header .featured-logos {
+      display: flex;
+      align-items: center;
+      gap: 20px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+    header .featured-logo {
+      width: 140px;
+      opacity: 0.9;
+      transition: opacity 0.3s;
+    }
+    header .featured-logo:hover {
+      opacity: 1;
+    }
+    header .feat-text {
+      color: var(--copper-light);
+      font-size: 16px;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      font-family: 'Orbitron', sans-serif;
+    }
+    h1 {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 48px;
+      color: var(--copper-light);
+      text-shadow: 0 0 15px var(--red-glow);
+      margin-top: 20px;
+    }
+    p.tagline {
+      margin-top: 20px;
+      font-size: 20px;
+      color: var(--text-muted);
+    }
+    section {
+      padding: 80px 10%;
+    }
+    .section-title {
+      text-align: center;
+      font-family: 'Orbitron', sans-serif;
+      font-size: 32px;
+      margin-bottom: 40px;
+      color: var(--copper);
+      text-shadow: 0 0 12px rgba(255,0,0,0.4);
+    }
+    .card-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 30px;
+    }
+    .card {
+      background: var(--black-secondary);
+      padding: 30px;
+      border-radius: 16px;
+      border: 1px solid rgba(184,115,51,0.4);
+      transition: 0.3s ease;
+      text-align: center;
+    }
+    .card:hover {
+      transform: translateY(-5px);
+      border-color: var(--red-glow);
+      box-shadow: 0 0 25px rgba(255,0,0,0.4);
+    }
+    .card .module-icon {
+      width: 80px;
+      height: 80px;
+      object-fit: contain;
+      margin-bottom: 15px;
+      filter: drop-shadow(0 0 8px var(--red-glow));
+    }
+    .card h3 {
+      font-family: 'Orbitron', sans-serif;
+      margin-bottom: 15px;
+      color: var(--copper-light);
+    }
+    .card p, .card ul {
+      color: var(--text-muted);
+      text-align: left;
+    }
+    .card ul {
+      padding-left: 18px;
+    }
+    .highlight {
+      color: var(--red-glow);
+      font-weight: 600;
+    }
+    footer {
+      text-align: center;
+      padding: 60px 20px;
+      background: #080c14;
+      color: var(--text-muted);
+      font-size: 14px;
+      border-top: 1px solid rgba(184,115,51,0.4);
+    }
+    @media (max-width: 768px) {
+      header .featured-logos {
+        gap: 10px;
+      }
+      header .featured-logo {
+        width: 100px;
+      }
+      h1 {
+        font-size: 36px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="logos">
+      <img src="/icons/ls-technologies.png" alt="LS Technologies Logo" class="main-logo">
+      <div class="featured-logos">
+        <img src="/icons/lennits-cryptolyzer.png" alt="LENNITS CRYPTOLYZER" class="featured-logo">
+        <span class="feat-text">feat. by</span>
+        <img src="/icons/cryptover-levinits.png" alt="CRYPTOVER LEVINITS" class="featured-logo">
+      </div>
+    </div>
+    <h1>LS-TECHNOLOGIES</h1>
+    <p class="tagline">Autonomous AI Governance, Smart Contract Management & Advanced Trading Intelligence</p>
+  </header>
+
+  <section>
+    <div class="section-title">Platform Overview</div>
+    <p>LS-Technologies is a <span class="highlight">next-generation AI automation platform</span> designed to provide full-stack intelligence for blockchain, trading, smart contract execution, and secure enterprise-grade automation. It is modular, self-learning, and fully adaptive.</p>
+  </section>
+
+  <section>
+    <div class="section-title">Core Modules</div>
+    <div class="card-grid">
+      <div class="card">
+        <img src="/icons/lennits-suite.png" alt="Lennit Suite" class="module-icon">
+        <h3>LENNITS_EXTRACTOR</h3>
+        <ul>
+          <li>High-speed data acquisition</li>
+          <li>Blockchain & off-chain intelligence</li>
+          <li>Cross-platform data pipelines</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>LS_AI_GOVERNANCE</h3>
+        <ul>
+          <li>Multi-agent oversight</li>
+          <li>Strategy optimization</li>
+          <li>Predictive decision-making</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>LS_TRADING_ENGINE</h3>
+        <ul>
+          <li>Autonomous arbitrage</li>
+          <li>Gas & fee optimization</li>
+          <li>AI-driven execution</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>LS_SMART_CONTRACT_SUITE</h3>
+        <ul>
+          <li>Multi-chain deployment</li>
+          <li>Contract lifecycle management</li>
+          <li>Token interaction & analytics</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>LS_SECURITY_FRAMEWORK</h3>
+        <ul>
+          <li>Real-time threat detection</li>
+          <li>Vulnerability analysis</li>
+          <li>Zero-trust enforcement</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>LS_MODEL_MANAGEMENT</h3>
+        <ul>
+          <li>Continuous AI retraining</li>
+          <li>Performance benchmarking</li>
+          <li>Self-optimizing workflows</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-title">Platform Capabilities</div>
+    <div class="card-grid">
+      <div class="card">
+        <h3>Autonomous Execution</h3>
+        <p>Real-time trade automation with intelligent risk scoring and adaptive position sizing.</p>
+      </div>
+      <div class="card">
+        <h3>AI Self-Evolution</h3>
+        <p>Built-in retraining cycles and reinforcement-driven strategic refinement.</p>
+      </div>
+      <div class="card">
+        <h3>Blockchain Intelligence</h3>
+        <p>Native blockchain scanning, smart contract parsing, and token analytics integration.</p>
+      </div>
+      <div class="card">
+        <h3>Scalable Infrastructure</h3>
+        <p>Containerized deployment with backend APIs, real-time dashboards, and mobile interface readiness.</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-title">Why LS-Technologies</div>
+    <p>LS-Technologies integrates <span class="highlight">enterprise AI governance</span> with autonomous execution and modular infrastructure. The platform is designed not just to operate — it <strong>evolves and self-optimizes</strong> in real-time.</p>
+  </section>
+
+  <footer>
+    © 2026 LS-Technologies | Intelligent Systems Engineered for Precision
+  </footer>
+</body>
+</html>
+EOF
+
+# Create mcp-app.html (Time app)
+cat > mcp-app.html << 'EOF'
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LS.Technologies - Time App</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin: 0;
+            padding: 20px;
+        }
+        .container {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 20px;
+            padding: 40px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            max-width: 600px;
+            width: 100%;
+            backdrop-filter: blur(10px);
+        }
+        h1 {
+            color: #333;
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            text-align: center;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .subtitle {
+            text-align: center;
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 1.1em;
+        }
+        .time-display {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 15px;
+            padding: 30px;
+            margin-bottom: 30px;
+            text-align: center;
+            box-shadow: 0 10px 30px rgba(102, 126, 234, 0.4);
+        }
+        #time {
+            font-size: 3em;
+            font-weight: bold;
+            color: white;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
+            font-family: 'Courier New', monospace;
+            word-break: break-word;
+        }
+        .format-selector {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+        .format-btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 10px;
+            background: #f0f0f0;
+            color: #666;
+            font-size: 1em;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-weight: 600;
+            flex: 1;
+            min-width: 100px;
+        }
+        .format-btn:hover {
+            background: #e0e0e0;
+            transform: translateY(-2px);
+        }
+        .format-btn.active {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+        .refresh-btn {
+            width: 100%;
+            padding: 15px;
+            border: none;
+            border-radius: 10px;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            font-size: 1.2em;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-bottom: 20px;
+            border: 2px solid transparent;
+        }
+        .refresh-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 30px rgba(102, 126, 234, 0.4);
+            border-color: white;
+        }
+        .refresh-btn:disabled {
+            opacity: 0.7;
+            cursor: not-allowed;
+            transform: none;
+        }
+        .status {
+            text-align: center;
+            color: #28a745;
+            font-size: 0.9em;
+            min-height: 20px;
+        }
+   
