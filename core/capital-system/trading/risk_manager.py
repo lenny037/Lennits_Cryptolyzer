@@ -1,0 +1,1 @@
+def risk(): return 'OK'

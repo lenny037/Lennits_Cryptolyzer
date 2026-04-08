@@ -1,0 +1,1 @@
+def signal(): return 'BUY'

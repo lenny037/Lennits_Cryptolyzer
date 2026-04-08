@@ -1,0 +1,19 @@
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: lennit-suite
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: lennit
+  template:
+    metadata:
+      labels:
+        app: lennit
+    spec:
+      containers:
+      - name: core
+        image: python:3.11
+        command: ["python","main.py"]

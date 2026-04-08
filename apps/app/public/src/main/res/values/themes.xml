@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.LennitCryptolyzer" parent="Theme.Material3.DayNight.NoActionBar">
+        <item name="colorPrimary">@color/lennit_copper</item>
+        <item name="colorSurface">@color/lennit_surface</item>
+        <item name="android:windowBackground">@color/lennit_black</item>
+        <item name="android:statusBarColor">@color/lennit_black</item>
+        <item name="android:navigationBarColor">@color/lennit_surface</item>
+    </style>
+</resources>
