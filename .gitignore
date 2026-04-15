@@ -1,0 +1,23 @@
+# Secrets
+*.env
+*.key
+*.pem
+
+# Archives
+archives/
+*.zip
+*.html
+
+# Runtime
+lennit_runtime/
+storage/
+
+# Logs
+*.log
+
+# Android
+*.apk
+*.dex
+
+# Python
+__pycache__
