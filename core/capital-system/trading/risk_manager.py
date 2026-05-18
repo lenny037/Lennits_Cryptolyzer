@@ -1,1 +1,0 @@
-def risk(): return 'OK'
