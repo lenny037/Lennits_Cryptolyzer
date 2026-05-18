@@ -1,1 +1,0 @@
-def signal(): return 'BUY'
