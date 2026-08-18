@@ -12,6 +12,9 @@ object DatabaseProvider {
                 context.applicationContext,
                 CryptolyzerDatabase::class.java,
                 "cryptolyzer.db"
-            ).build().also { instance = it }
+            )
+                .addMigrations(MIGRATION_1_2)
+                .build()
+                .also { instance = it }
         }
 }
