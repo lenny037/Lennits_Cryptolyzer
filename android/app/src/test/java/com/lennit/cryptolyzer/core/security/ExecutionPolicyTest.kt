@@ -22,6 +22,11 @@ class ExecutionPolicyTest {
         assertEquals(ExecutionDecision.SIMULATE_ONLY, policy.evaluate(SystemMode.CONTROLLED_LIVE, request, safeRisk, false))
     }
 
+    @Test fun failedOptionalSimulationStillDeniesLiveExecution() {
+        val optional = request.copy(simulationRequired = false)
+        assertEquals(ExecutionDecision.DENY, policy.evaluate(SystemMode.CONTROLLED_LIVE, optional, safeRisk, false))
+    }
+
     @Test fun manualApprovalRequiresHumanDecision() {
         assertEquals(ExecutionDecision.REQUIRE_APPROVAL, policy.evaluate(SystemMode.MANUAL_APPROVAL, request, safeRisk, true))
     }
@@ -29,5 +34,10 @@ class ExecutionPolicyTest {
     @Test fun excessiveRiskDenies() {
         val risky = safeRisk.copy(score = 0.9)
         assertEquals(ExecutionDecision.DENY, policy.evaluate(SystemMode.CONTROLLED_LIVE, request, risky, true))
+    }
+
+    @Test fun nonFiniteRiskDenies() {
+        val invalid = safeRisk.copy(score = Double.NaN)
+        assertEquals(ExecutionDecision.DENY, policy.evaluate(SystemMode.CONTROLLED_LIVE, request, invalid, true))
     }
 }
