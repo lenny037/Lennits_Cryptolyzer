@@ -10,6 +10,9 @@ interface DomainEventDao {
     @Insert
     suspend fun insert(event: DomainEventEntity)
 
+    @Query("SELECT * FROM domain_events WHERE processed = 0 ORDER BY createdAtEpochMs ASC LIMIT :limit")
+    suspend fun pending(limit: Int): List<DomainEventEntity>
+
     @Query("SELECT * FROM domain_events ORDER BY createdAtEpochMs DESC LIMIT :limit")
     fun observeRecent(limit: Int = 100): Flow<List<DomainEventEntity>>
 
