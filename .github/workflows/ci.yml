@@ -95,7 +95,9 @@ jobs:
           [ "$oversized" -eq 0 ] || exit 1
           echo "No oversized tracked files."
 
-  secrets:
+  # Job id deliberately not `secrets`: that name collides with the reserved `secrets` context and
+  # GitHub rejects the workflow at startup.
+  secret-scan:
     name: Secret scanning
     runs-on: ubuntu-latest
     timeout-minutes: 10
