@@ -67,7 +67,12 @@ Requires JDK 21. The Gradle wrapper handles Gradle itself.
 ./gradlew architectureGuard
 ./scripts/firebase-guard.sh
 ./scripts/float-guard.sh
+./scripts/verify-gradle-wrapper.sh
 ```
+
+The guards are scripts rather than CI-only steps on purpose: a gate that only exists in a workflow
+file is a gate you meet after pushing. Each has been verified to fail when a violation is
+introduced, which is the only evidence that a gate is real.
 
 The Android SDK is not required to build or test the core.
 
