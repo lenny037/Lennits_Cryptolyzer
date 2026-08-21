@@ -1,0 +1,63 @@
+# --- Build output -------------------------------------------------------------
+build/
+out/
+bin/
+.gradle/
+.kotlin/
+local.properties
+
+# --- Toolchains fetched into the workspace (never committed) -------------------
+tools/
+*.tar.gz
+*.zip
+*.zip.[0-9][0-9][0-9]
+*.7z
+*.rar
+
+# --- Android ------------------------------------------------------------------
+*.apk
+*.aab
+*.ap_
+*.dex
+captures/
+.cxx/
+release/
+# Firebase configuration must never reappear; see ADR-0001 and scripts/firebase-guard.sh
+google-services.json
+
+# --- Secrets ------------------------------------------------------------------
+*.keystore
+*.jks
+*.p12
+*.pem
+*.key
+secrets.properties
+.env
+.env.*
+!.env.example
+
+# --- Local databases and generated data ---------------------------------------
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+
+# --- IDE ----------------------------------------------------------------------
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+*.swp
+*~
+
+# --- OS -----------------------------------------------------------------------
+.DS_Store
+Thumbs.db
+
+# --- Node, only relevant to legacy/ web material ------------------------------
+node_modules/
+dist/
+.vite/
+npm-debug.log*

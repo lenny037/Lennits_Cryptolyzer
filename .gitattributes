@@ -1,0 +1,18 @@
+# Normalise line endings so a Windows or Termux checkout does not produce noise diffs.
+* text=auto eol=lf
+
+*.kt      text diff=kotlin
+*.kts     text diff=kotlin
+*.java    text diff=java
+*.md      text
+*.yml     text
+*.toml    text
+*.sh      text eol=lf
+gradlew   text eol=lf
+gradlew.bat text eol=crlf
+
+# Binary, and the only binary the guards permit.
+gradle/wrapper/gradle-wrapper.jar binary
+
+# Generated documentation and reports should not inflate diff review.
+docs/inventory/*.md linguist-documentation

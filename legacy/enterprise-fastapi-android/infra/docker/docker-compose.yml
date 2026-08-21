@@ -1,0 +1,84 @@
+# MODULE 20: LENNITS_CRYPTOLYZER — Docker Compose (VPS deployment)
+version: "3.9"
+
+services:
+
+  # ── FastAPI Backend ────────────────────────────────────────────────────
+  backend:
+    build:
+      context:    ../../backend
+      dockerfile: Dockerfile
+    container_name: lennit_backend
+    restart:      always
+    ports:
+      - "8000:8000"
+    environment:
+      - ETHEREUM_RPC_URL=${ETHEREUM_RPC_URL}
+      - CHAIN_ID=${CHAIN_ID:-1}
+      - LENNIT_API_KEY=${LENNIT_API_KEY}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - DEVIATION_THRESHOLD=${DEVIATION_THRESHOLD:-5.0}
+      - POLL_INTERVAL_SECONDS=${POLL_INTERVAL_SECONDS:-2.0}
+      - DATABASE_URL=postgresql+asyncpg://lennit:${POSTGRES_PASSWORD}@postgres:5432/lennit_db
+      - REDIS_URL=redis://redis:6379/0
+      - DEBUG=false
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - lennit_net
+    healthcheck:
+      test:     ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout:  10s
+      retries:  3
+
+  # ── PostgreSQL ─────────────────────────────────────────────────────────
+  postgres:
+    image:          postgres:16-alpine
+    container_name: lennit_postgres
+    restart:        always
+    environment:
+      POSTGRES_DB:       lennit_db
+      POSTGRES_USER:     lennit
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - lennit_net
+
+  # ── Redis ──────────────────────────────────────────────────────────────
+  redis:
+    image:          redis:7-alpine
+    container_name: lennit_redis
+    restart:        always
+    command:        redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    networks:
+      - lennit_net
+
+  # ── Nginx (reverse proxy + TLS) ────────────────────────────────────────
+  nginx:
+    image:          nginx:1.27-alpine
+    container_name: lennit_nginx
+    restart:        always
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./certs:/etc/nginx/certs:ro
+      - ../../web:/usr/share/nginx/html:ro
+    depends_on:
+      - backend
+    networks:
+      - lennit_net
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  lennit_net:
+    driver: bridge
