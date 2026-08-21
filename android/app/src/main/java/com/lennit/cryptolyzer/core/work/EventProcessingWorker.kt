@@ -3,6 +3,7 @@ package com.lennit.cryptolyzer.core.work
 import android.content.Context
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
+import com.lennit.cryptolyzer.core.events.CoreEventHandlers
 import com.lennit.cryptolyzer.core.events.DomainEventProcessor
 import com.lennit.cryptolyzer.data.local.DatabaseProvider
 
@@ -12,10 +13,10 @@ class EventProcessingWorker(
 ) : CoroutineWorker(appContext, workerParams) {
     override suspend fun doWork(): Result {
         val dao = DatabaseProvider.get(applicationContext).domainEventDao()
-        // No event type is acknowledged here until a concrete handler is wired.
-        // This worker currently acts as the durable scheduling boundary.
-        DomainEventProcessor(dao, emptyMap()).processBatch(BATCH_SIZE)
-        return Result.success()
+        return runCatching {
+            DomainEventProcessor(dao, CoreEventHandlers.create()).processBatch(BATCH_SIZE)
+            Result.success()
+        }.getOrElse { Result.retry() }
     }
 
     companion object {
