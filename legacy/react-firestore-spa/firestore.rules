@@ -1,0 +1,107 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // --- PHASE 3: GLOBAL HELPERS ---
+    
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerified() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function getUserRole() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+    }
+
+    function isAdmin() {
+      return isVerified() && getUserRole() == 'admin';
+    }
+
+    function isAgent() {
+      return isVerified() && (getUserRole() == 'agent' || getUserRole() == 'admin');
+    }
+
+    // --- PILLAR 2: VALIDATION BLUEPRINTS ---
+
+    function isValidUser(data) {
+      return data.keys().hasAll(['uid', 'role', 'createdAt', 'updatedAt']) 
+          && data.keys().size() == 4
+          && data.uid == request.auth.uid
+          && data.role in ['user', 'admin', 'agent']
+          && data.createdAt == request.time
+          && data.updatedAt == request.time;
+    }
+
+    function isValidAgent(data) {
+      return data.keys().hasAll(['id', 'name', 'type', 'status'])
+          && data.id is string && data.id.size() <= 64
+          && data.name is string && data.name.size() <= 100
+          && data.type in ['autonomous', 'researcher', 'executor']
+          && data.status in ['idle', 'running', 'paused', 'error'];
+    }
+
+    function isValidExecution(data) {
+      return data.keys().hasAll(['id', 'module', 'params', 'risk', 'status', 'timestamp'])
+          && data.id is string
+          && data.module is string
+          && data.risk is map
+          && data.timestamp == request.time;
+    }
+
+    // --- GLOBAL SAFETY NET ---
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- PILLAR 1: MASTER GATE ---
+
+    match /users/{uid} {
+      allow get: if isOwner(uid) || isAdmin();
+      allow create: if isOwner(uid) && isValidUser(incoming()) && incoming().role == 'user';
+      allow update: if isOwner(uid) && isValidUser(incoming()) 
+                     && incoming().diff(existing()).affectedKeys().hasOnly(['updatedAt'])
+                     || isAdmin();
+    }
+
+    match /agents/{agentId} {
+      allow read: if isVerified();
+      allow create: if isAdmin() && isValidAgent(incoming()) && isValidId(agentId);
+      allow update: if (isAdmin() || isAgent()) && isValidAgent(incoming()) 
+                     && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'lastHeartbeat']);
+    }
+
+    match /executions/{executionId} {
+      allow read: if isVerified() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if (isAgent() || isAdmin()) && isValidExecution(incoming()) && isValidId(executionId);
+    }
+
+    match /memories/{memoryId} {
+      allow read: if isAgent() || isAdmin();
+      allow write: if isAgent() || isAdmin() && isValidId(memoryId);
+    }
+
+    match /vault/{positionId} {
+      allow read: if isVerified();
+      allow write: if isAdmin() && isValidId(positionId);
+    }
+  }
+}
