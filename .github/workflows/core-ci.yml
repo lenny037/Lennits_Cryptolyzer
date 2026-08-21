@@ -1,4 +1,4 @@
-name: CI
+name: Core CI
 on: [push, pull_request]
 jobs:
   core:
