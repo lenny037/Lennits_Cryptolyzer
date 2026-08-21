@@ -1,8 +1,0 @@
-name: Core CI
-on: [push]
-jobs:
-  probe-checkout:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - run: echo checked out
