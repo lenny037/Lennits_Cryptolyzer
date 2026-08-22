@@ -1,21 +1,32 @@
 package com.lennit.cryptolyzer.persistence
 
-import java.sql.Connection
-
 /**
- * Forward-only, numbered schema migrations.
+ * The released schema history.
  *
- * Rules that this list must keep obeying, because an installed app's database cannot be dropped
- * and recreated the way a server's can:
- *  1. never edit a shipped migration, only append a new one;
- *  2. every migration is idempotent where SQLite allows it (IF NOT EXISTS);
- *  3. no migration deletes event rows.
+ * Rules, restated because they are enforced by [SqliteMigrator] and by
+ * `core/persistence/src/test/resources/fixtures`, not by good intentions:
+ *
+ *  1. **Never edit a released entry.** Its checksum is recorded in every database it built.
+ *     Append a new [MigrationDefinition] instead. `SqliteMigratorTest` proves an edit is caught.
+ *  2. **Never delete event rows.** The log is the audit trail; a migration that loses rows loses
+ *     the only record of what the system decided.
+ *  3. **Use `IF NOT EXISTS` where SQLite allows it,** so a partially applied migration from an
+ *     older, pre-ledger build can still be completed.
+ *
+ * Authoring guide: `docs/persistence/MIGRATIONS.md`.
  */
-internal object Migrations {
+public object Migrations {
 
-    val statements: List<List<String>> = listOf(
-        // --- version 1: durable event log -------------------------------------------------
-        listOf(
+    /**
+     * Version 1 — the durable event log.
+     *
+     * Frozen. Every database in the field was built by exactly this SQL, and
+     * `core/persistence/src/test/resources/fixtures/schema-v1` is a text copy of the result.
+     */
+    private val DURABLE_EVENT_LOG = MigrationDefinition(
+        version = 1,
+        name = "durable_event_log",
+        statements = listOf(
             """
             CREATE TABLE IF NOT EXISTS events (
                 event_id         TEXT    PRIMARY KEY,
@@ -42,43 +53,9 @@ internal object Migrations {
         ),
     )
 
-    val currentVersion: Int get() = statements.size
+    /** Released migrations, in order. Append only. */
+    public val RELEASED: List<MigrationDefinition> = listOf(DURABLE_EVENT_LOG)
 
-    fun apply(connection: Connection) {
-        connection.createStatement().use { statement ->
-            statement.execute("CREATE TABLE IF NOT EXISTS schema_meta (version INTEGER NOT NULL)")
-        }
-        val installed = readVersion(connection)
-        if (installed >= currentVersion) return
-
-        connection.autoCommit = false
-        try {
-            for (version in (installed + 1)..currentVersion) {
-                connection.createStatement().use { statement ->
-                    statements[version - 1].forEach(statement::execute)
-                }
-            }
-            writeVersion(connection, currentVersion)
-            connection.commit()
-        } catch (error: Throwable) {
-            connection.rollback()
-            throw error
-        } finally {
-            connection.autoCommit = true
-        }
-    }
-
-    private fun readVersion(connection: Connection): Int =
-        connection.createStatement().use { statement ->
-            statement.executeQuery("SELECT version FROM schema_meta LIMIT 1").use { rows ->
-                if (rows.next()) rows.getInt(1) else 0
-            }
-        }
-
-    private fun writeVersion(connection: Connection, version: Int) {
-        connection.createStatement().use { statement ->
-            statement.execute("DELETE FROM schema_meta")
-            statement.execute("INSERT INTO schema_meta (version) VALUES ($version)")
-        }
-    }
+    /** The schema version this build expects. */
+    public val currentVersion: Int get() = RELEASED.size
 }

@@ -54,6 +54,15 @@ jobs:
       - name: Build, test and run architecture guards
         run: ./gradlew verifyAll --no-daemon --stacktrace
 
+      # Named separately from verifyAll on purpose. This is the Phase 4 exit gate, and the failure
+      # it catches — a change that breaks a database already installed on a user's device — needs to
+      # be identifiable in the check list rather than buried inside an aggregate task. The tests are
+      # already up to date from verifyAll, so the step costs almost nothing.
+      - name: Schema compatibility and migration gate
+        run: >-
+          ./gradlew :core:persistence:test :core:eventbus:test --no-daemon --stacktrace
+          --tests '*Migration*' --tests '*Fixture*' --tests '*Registry*'
+
       - name: Upload test reports
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
