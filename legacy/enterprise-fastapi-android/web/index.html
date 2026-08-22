@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#B87333" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <title>LENNITS CRYPTOLYZER</title>
+  <link rel="manifest" href="/manifest.json" />
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <!-- ── App Shell ─────────────────────────────────────────────────────── -->
+  <div id="app">
+
+    <!-- Loading splash -->
+    <div id="splash" class="splash">
+      <div class="splash-logo">
+        <span class="logo-icon">⚡</span>
+        <h1 class="logo-title">LENNITS CRYPTOLYZER</h1>
+        <p class="logo-sub">by LENNIT_SUITE TECHNOLOGIES</p>
+        <div class="splash-bar"><div class="splash-fill"></div></div>
+      </div>
+    </div>
+
+    <!-- Main container -->
+    <div id="main" class="main hidden">
+
+      <!-- Header -->
+      <header class="header">
+        <div class="header-left">
+          <span class="header-logo">⚡</span>
+          <span class="header-title">CRYPTOLYZER</span>
+        </div>
+        <div class="header-right">
+          <div id="systemStatus" class="status-badge status-ok">● ACTIVE</div>
+        </div>
+      </header>
+
+      <!-- Screens -->
+      <main class="screen-container">
+        <div id="screen-dashboard"     class="screen active"></div>
+        <div id="screen-agents"        class="screen"></div>
+        <div id="screen-vault"         class="screen"></div>
+        <div id="screen-strategies"    class="screen"></div>
+        <div id="screen-notifications" class="screen"></div>
+        <div id="screen-safe"          class="screen"></div>
+        <div id="screen-settings"      class="screen"></div>
+      </main>
+
+      <!-- Bottom navigation -->
+      <nav class="bottom-nav">
+        <button class="nav-btn active" data-screen="dashboard">
+          <span class="nav-icon">📊</span>
+          <span class="nav-label">Dashboard</span>
+        </button>
+        <button class="nav-btn" data-screen="agents">
+          <span class="nav-icon">🤖</span>
+          <span class="nav-label">Agents</span>
+        </button>
+        <button class="nav-btn" data-screen="vault">
+          <span class="nav-icon">🏛</span>
+          <span class="nav-label">Vault</span>
+        </button>
+        <button class="nav-btn" data-screen="strategies">
+          <span class="nav-icon">📈</span>
+          <span class="nav-label">Strategies</span>
+        </button>
+        <button class="nav-btn" data-screen="notifications">
+          <span class="nav-icon">🔔</span>
+          <span class="nav-label">Alerts</span>
+          <span id="notifBadge" class="notif-badge hidden">0</span>
+        </button>
+        <button class="nav-btn" data-screen="safe">
+          <span class="nav-icon">🛡</span>
+          <span class="nav-label">Safe</span>
+        </button>
+        <button class="nav-btn" data-screen="settings">
+          <span class="nav-icon">⚙️</span>
+          <span class="nav-label">Settings</span>
+        </button>
+      </nav>
+    </div><!-- /#main -->
+
+  </div><!-- /#app -->
+
+  <script src="/js/app.js" defer></script>
+  <script src="/js/charts.js" defer></script>
+  <script src="/js/crypto_engine.js" defer></script>
+</body>
+</html>

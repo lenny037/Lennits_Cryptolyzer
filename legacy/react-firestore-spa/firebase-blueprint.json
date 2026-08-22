@@ -1,0 +1,95 @@
+{
+  "entities": {
+    "User": {
+      "title": "User Profile",
+      "description": "System user with role-based permissions",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "role": { "type": "string", "enum": ["user", "admin", "agent"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "role", "createdAt", "updatedAt"]
+    },
+    "Agent": {
+      "title": "Autonomous Agent",
+      "description": "Represents an AI agent managed by the system",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "type": { "type": "string", "enum": ["autonomous", "researcher", "executor"] },
+        "status": { "type": "string", "enum": ["idle", "running", "paused", "error"] },
+        "lastHeartbeat": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "name", "type", "status"]
+    },
+    "Execution": {
+      "title": "Operation Execution",
+      "description": "Audit log of a financial operation",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "module": { "type": "string" },
+        "params": { "type": "object" },
+        "risk": { "type": "object" },
+        "status": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "module", "params", "risk", "status", "timestamp"]
+    },
+    "Memory": {
+      "title": "System Memory",
+      "description": "Semantic memory stored for agents",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "type": { "type": "string" },
+        "content": { "type": "string" },
+        "importance": { "type": "number" },
+        "tags": { "type": "array", "items": { "type": "string" } },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "type", "content", "createdAt"]
+    },
+    "TreasuryPosition": {
+      "title": "Treasury Position",
+      "description": "Financial position held by the platform",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "asset": { "type": "string" },
+        "amount": { "type": "string" },
+        "valueUsd": { "type": "number" },
+        "apy": { "type": "number" },
+        "platform": { "type": "string" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "asset", "amount", "valueUsd", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "/users/{uid}": {
+      "schema": "User",
+      "description": "Global user profiles"
+    },
+    "/agents/{agentId}": {
+      "schema": "Agent",
+      "description": "Active system agents"
+    },
+    "/executions/{executionId}": {
+      "schema": "Execution",
+      "description": "Audit trail of executions"
+    },
+    "/memories/{memoryId}": {
+      "schema": "Memory",
+      "description": "Agent semantic memories"
+    },
+    "/vault/{positionId}": {
+      "schema": "TreasuryPosition",
+      "description": "Treasury state"
+    }
+  }
+}
