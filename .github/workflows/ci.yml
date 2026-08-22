@@ -1,0 +1,138 @@
+name: CI
+
+# ADR-0011: CI is a Phase 0.5 gate, not a Phase 19 activity. Every gate below must be able to
+# fail. A pipeline that cannot fail is decoration.
+#
+# Two repository policies constrain this file, and both are respected rather than worked around:
+#   1. Only GitHub-owned actions are permitted (verified and third-party actions are disabled).
+#      So no gradle/actions, no gitleaks action; the equivalent checks are implemented as scripts
+#      in scripts/, which has the side benefit that they run identically on a developer machine.
+#   2. Actions must be pinned to a full commit SHA, not a tag. A tag is mutable; a SHA is not.
+#      The `# vN` comment records human-readable intent for each pin.
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  core:
+    name: Core build and test (JVM)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Cache Gradle dependencies
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('gradle/wrapper/gradle-wrapper.properties', 'gradle/libs.versions.toml', '**/*.gradle.kts') }}
+          restore-keys: |
+            gradle-${{ runner.os }}-
+
+      - name: Verify the Gradle wrapper jar
+        # Runs before any Gradle invocation: the wrapper executes first, so it is checked first.
+        run: ./scripts/verify-gradle-wrapper.sh
+
+      - name: Build, test and run architecture guards
+        run: ./gradlew verifyAll --no-daemon --stacktrace
+
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: core-test-reports
+          path: |
+            core/*/build/reports/tests/test
+            core/*/build/test-results/test
+          retention-days: 14
+          if-no-files-found: warn
+
+  guards:
+    name: Architecture and dependency guards
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Verify the Gradle wrapper jar
+        run: ./scripts/verify-gradle-wrapper.sh
+
+      - name: Firebase and Firestore exclusion guard
+        run: ./scripts/firebase-guard.sh
+
+      - name: Floating-point-in-money guard
+        run: ./scripts/float-guard.sh
+
+      - name: Reject committed binary archives
+        # The repository previously carried ~79 MB of split zip archives on the default branch.
+        # See docs/migration/DELETION_MANIFEST.md.
+        run: |
+          set -euo pipefail
+          found=$(git ls-files \
+            | grep -v '^gradle/wrapper/gradle-wrapper.jar$' \
+            | grep -iE '\.(zip|zip\.[0-9]{3}|7z|rar|jar|aar|apk|aab|so|dylib|dll)$' || true)
+          if [ -n "$found" ]; then
+            echo "VIOLATION: binary artifacts are tracked in git:" >&2
+            echo "$found" >&2
+            exit 1
+          fi
+          echo "No tracked binary archives."
+
+      - name: Reject oversized tracked files
+        run: |
+          set -euo pipefail
+          limit=$((2 * 1024 * 1024))
+          oversized=0
+          while IFS= read -r file; do
+            [ -f "$file" ] || continue
+            size=$(wc -c <"$file")
+            if [ "$size" -gt "$limit" ]; then
+              echo "VIOLATION: $file is $size bytes, over the 2 MiB limit" >&2
+              oversized=1
+            fi
+          done < <(git ls-files)
+          [ "$oversized" -eq 0 ] || exit 1
+          echo "No oversized tracked files."
+
+  # Job id deliberately not `secrets`: that name collides with the reserved `secrets` context and
+  # GitHub rejects the workflow at startup.
+  secret-scan:
+    name: Secret scanning
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Reject credential material in tracked files
+        # A dependency-free check, since third-party scanning actions are not permitted here.
+        # GitHub's own secret scanning still applies at the repository level and is complementary:
+        # it knows provider token formats, this knows the repository's own layout.
+        run: |
+          set -euo pipefail
+          patterns='PRIVATE KEY-----|BEGIN OPENSSH PRIVATE|xoxb-[0-9A-Za-z-]{10,}|ghp_[0-9A-Za-z]{30,}|AKIA[0-9A-Z]{16}|-----BEGIN PGP PRIVATE'
+          if git grep -nIE "$patterns" -- . ':!docs' ':!legacy' ':!.github/workflows'; then
+            echo "VIOLATION: possible credential material committed" >&2
+            exit 1
+          fi
+          echo "No credential material in tracked files."
+
+  # The Android job is intentionally absent until :android:app exists (PLAN_V2 Phase 4). Adding a
+  # job that builds nothing would report a green gate for work that has not been done.

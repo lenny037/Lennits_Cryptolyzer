@@ -1,0 +1,21 @@
+[package]
+name    = "lennit-genesis-core"
+version = "2.0.0"
+edition = "2021"
+authors = ["LENNIT_SUITE TECHNOLOGIES"]
+description = "Native NPU acceleration and ZK oracle for LENNITS_CRYPTOLYZER"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+jni     = { version = "0.21",  features = ["invocation"] }
+log     = "0.4"
+android_logger = "0.14"
+
+[profile.release]
+opt-level   = 3
+lto         = true
+codegen-units = 1
+panic       = "abort"
+strip       = true

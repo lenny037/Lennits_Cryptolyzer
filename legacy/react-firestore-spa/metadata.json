@@ -1,0 +1,8 @@
+{
+  "name": "Lennits_Cryptolyzer",
+  "description": "Modular AI-Orchestrated Financial Intelligence and Execution Platform. Features autonomous agents, MEV arbitrage, DeFi farming, and multi-chain intelligence.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
