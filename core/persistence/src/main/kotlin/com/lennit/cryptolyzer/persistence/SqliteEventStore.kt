@@ -43,7 +43,13 @@ public class SqliteEventStore(
             statement.execute("PRAGMA foreign_keys=ON")
             statement.execute("PRAGMA busy_timeout=5000")
         }
-        Migrations.apply(connection)
+        // A store whose schema could not be verified must not be usable. Constructing it and
+        // hoping the first query fails would leave a half-open object in the runtime graph, so the
+        // failure is raised here. Callers that want it as a value use [openChecked].
+        when (val migrated = SqliteMigrator.released().migrate(connection)) {
+            is Outcome.Failure -> throw IllegalStateException(migrated.error.message)
+            is Outcome.Success -> Unit
+        }
     }
 
     override fun append(envelope: EventEnvelope): Outcome<AppendResult> = guarded("append") {
@@ -287,6 +293,24 @@ public class SqliteEventStore(
 
         public fun inMemory(): SqliteEventStore =
             SqliteEventStore(DriverManager.getConnection("jdbc:sqlite::memory:"))
+
+        /**
+         * Opens a store at [path], returning the schema failure as a value.
+         *
+         * The runtime supervisor needs to report "this device's database was built by different SQL"
+         * as an operational state, not catch an exception out of a constructor.
+         */
+        public fun openChecked(path: String): Outcome<SqliteEventStore> {
+            val connection = DriverManager.getConnection("jdbc:sqlite:$path")
+            return when (val migrated = SqliteMigrator.released().migrate(connection)) {
+                is Outcome.Failure -> {
+                    connection.close()
+                    migrated
+                }
+                // Migration is idempotent, so the constructor's own call is a no-op verification.
+                is Outcome.Success -> Outcome.success(SqliteEventStore(connection))
+            }
+        }
 
         public val schemaVersion: Int get() = Migrations.currentVersion
     }
