@@ -1,0 +1,32 @@
+name: Android Mobile Core
+
+on:
+  push:
+    branches: ["rebuild/**"]
+  pull_request:
+    branches: ["main", "rebuild/**"]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: android
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v5
+        with:
+          gradle-version: "9.5"
+      - run: gradle --no-daemon --stacktrace assembleDebug
+      - run: gradle --no-daemon --stacktrace test
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lennits-cryptolyzer-debug-apk
+          path: android/app/build/outputs/apk/debug/*.apk
