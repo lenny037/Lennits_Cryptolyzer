@@ -1,0 +1,35 @@
+name: Architecture Guard
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  architecture-guard:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Reject Firebase/Firestore core dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          if grep -RniE --exclude-dir=.git --exclude='*.md' --exclude='*.txt' \
+            'firebase|firestore|com\.google\.firebase|google-services' .; then
+            echo 'Firebase/Firestore reference detected in executable project content.'
+            exit 1
+          fi
+
+      - name: Reject committed secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          if grep -RniE --exclude-dir=.git --exclude='*.md' --exclude='*.txt' \
+            '(api[_-]?key|secret[_-]?key|private[_-]?key|access[_-]?token)[[:space:]]*[:=][[:space:]]*["'"']?[A-Za-z0-9_./+=-]{20,}' .; then
+            echo 'Potential hard-coded credential detected.'
+            exit 1
+          fi
